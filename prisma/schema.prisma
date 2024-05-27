@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  // @id defines primary key for model, and @default(uuid()) sets the default value of the id field to a universally unique identifier (UUID)
+  id                     String   @id @default(uuid())
+  name                   String
+  priceInCents           Int
+  filePath               String
+  imagePath              String
+  description            String
+  isAvailableForPurchase Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  orders                 Order[]
+  downloadVerifications DownloadVerification[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  // each user may have mult. orders, so we use array
+  orders    Order[]
+}
+
+model Order {
+  id               String   @id @default(uuid())
+  pricePaidInCents Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId    String
+  productId String
+
+  // Linking of foreign keys in prisma - "user property of type User is going to be a relation. Field userId references the id field in our user table (id in User maps to userId in Order)). Cascade flag just says when deleting user, delete all orders associated with that user"
+  // User is the parent record; when a user is deleted, all associated orders are also deleted (Cascade).
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Product is the parent record; deleting a product is restricted if there are orders referencing it (Restrict).
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+model DownloadVerification {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
