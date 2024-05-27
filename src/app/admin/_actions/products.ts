@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import path from "path";
 
 // creating our own file schema for file and image below, since there isn't one built in
 const fileSchema = z.instanceof(File, { message: "Required" });
@@ -33,18 +34,20 @@ export async function addProduct(prevState: unknown, formData: FormData) {
 
   try {
     // Ensure the products directory exists
-    await fs.mkdir("products", { recursive: true });
-    const filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
+    const productsDir = path.join(process.cwd(), 'products');
+    console.log(`Creating directory: ${productsDir}`);
+    await fs.mkdir(productsDir, { recursive: true });
+    const filePath = path.join(productsDir, `${crypto.randomUUID()}-${data.file.name}`);
+    console.log(`Writing file to: ${filePath}`);
     await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
 
     // Ensure the public/products directory exists
-    await fs.mkdir("public/products", { recursive: true });
-    // Don't need public in path because it will assume public once you're actually using the path
-    const imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
-    await fs.writeFile(
-      `public${imagePath}`,
-      Buffer.from(await data.image.arrayBuffer())
-    );
+    const publicProductsDir = path.join(process.cwd(), 'public', 'products');
+    console.log(`Creating directory: ${publicProductsDir}`);
+    await fs.mkdir(publicProductsDir, { recursive: true });
+    const imagePath = path.join('/products', `${crypto.randomUUID()}-${data.image.name}`);
+    console.log(`Writing image to: ${path.join('public', imagePath)}`);
+    await fs.writeFile(path.join(process.cwd(), 'public', imagePath), Buffer.from(await data.image.arrayBuffer()));
 
     // Create a new product record in the database
     await db.product.create({
@@ -59,14 +62,14 @@ export async function addProduct(prevState: unknown, formData: FormData) {
     });
 
     // Refresh cache
-    await revalidatePath("/");
-    await revalidatePath("/products");
+    await revalidatePath('/');
+    await revalidatePath('/products');
 
     // Redirect to products page
-    return NextResponse.redirect("/admin/products");
+    return NextResponse.redirect('/admin/products');
   } catch (error) {
-    console.error("Error adding product:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    console.error('Error adding product:', error);
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
 
