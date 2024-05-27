@@ -159,7 +159,7 @@ export async function deleteProduct(id: string) {
     try {
       await fs.unlink(product.filePath);
     } catch (err) {
-      if (err.code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         throw err;
       }
       // Ignore ENOENT errors, which indicate that the file doesn't exist
@@ -170,7 +170,7 @@ export async function deleteProduct(id: string) {
     try {
       await fs.unlink(`public${product.imagePath}`);
     } catch (err) {
-      if (err.code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         throw err;
       }
       // Ignore ENOENT errors, which indicate that the file doesn't exist
