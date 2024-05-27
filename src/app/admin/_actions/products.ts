@@ -5,9 +5,6 @@ import { z } from "zod";
 import fs from "fs/promises";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { NextResponse } from "next/server";
-import path from "path";
-import { logInfo, logError } from "@/lib/logger";
 
 // creating our own file schema for file and image below, since there isn't one built in
 const fileSchema = z.instanceof(File, { message: "Required" });
@@ -25,7 +22,6 @@ const addSchema = z.object({
 });
 
 export async function addProduct(prevState: unknown, formData: FormData) {
-  // Transform form data into an actual object we can use, then parse
   const result = addSchema.safeParse(Object.fromEntries(formData.entries()));
   if (result.success === false) {
     return result.error.formErrors.fieldErrors;
@@ -33,60 +29,32 @@ export async function addProduct(prevState: unknown, formData: FormData) {
 
   const data = result.data;
 
-  try {
-    // Ensure the products directory exists
-    const productsDir = path.join(process.cwd(), "products");
-    await logInfo(`Creating directory: ${productsDir}`);
-    await fs.mkdir(productsDir, { recursive: true });
-    await logInfo(`Directory created: ${productsDir}`);
+  await fs.mkdir("products", { recursive: true });
+  const filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
+  await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
 
-    const filePath = path.join(
-      productsDir,
-      `${crypto.randomUUID()}-${data.file.name}`
-    );
-    await logInfo(`Writing file to: ${filePath}`);
-    await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
-    await logInfo(`File written: ${filePath}`);
+  await fs.mkdir("public/products", { recursive: true });
+  const imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
+  await fs.writeFile(
+    `public${imagePath}`,
+    Buffer.from(await data.image.arrayBuffer())
+  );
 
-    // Ensure the public/products directory exists
-    const publicProductsDir = path.join(process.cwd(), "public", "products");
-    await logInfo(`Creating directory: ${publicProductsDir}`);
-    await fs.mkdir(publicProductsDir, { recursive: true });
-    await logInfo(`Directory created: ${publicProductsDir}`);
+  await db.product.create({
+    data: {
+      isAvailableForPurchase: false,
+      name: data.name,
+      description: data.description,
+      priceInCents: data.priceInCents,
+      filePath,
+      imagePath,
+    },
+  });
 
-    const imagePath = path.join(
-      "/products",
-      `${crypto.randomUUID()}-${data.image.name}`
-    );
-    await logInfo(`Writing image to: ${path.join("public", imagePath)}`);
-    await fs.writeFile(
-      path.join(process.cwd(), "public", imagePath),
-      Buffer.from(await data.image.arrayBuffer())
-    );
-    await logInfo(`Image written: ${path.join("public", imagePath)}`);
+  revalidatePath("/");
+  revalidatePath("/products");
 
-    // Create a new product record in the database
-    await db.product.create({
-      data: {
-        isAvailableForPurchase: false,
-        name: data.name,
-        description: data.description,
-        priceInCents: data.priceInCents,
-        filePath,
-        imagePath,
-      },
-    });
-
-    // Refresh cache
-    await revalidatePath("/");
-    await revalidatePath("/products");
-
-    // Redirect to products page
-    return NextResponse.redirect("/admin/products");
-  } catch (error) {
-    await logError("Error adding product", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
-  }
+  redirect("/admin/products");
 }
 
 // same as addSchema, but extending it to change the file to be just default file schema, make it optional, and do the same with image
