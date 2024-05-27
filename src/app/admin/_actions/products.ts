@@ -5,6 +5,7 @@ import { z } from "zod";
 import fs from "fs/promises";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
 
 // creating our own file schema for file and image below, since there isn't one built in
 const fileSchema = z.instanceof(File, { message: "Required" });
@@ -21,9 +22,8 @@ const addSchema = z.object({
   image: imageSchema.refine((file) => file.size > 0, "Required"),
 });
 
-// actions must be async
 export async function addProduct(prevState: unknown, formData: FormData) {
-  // transform form data into an actual object we can use, then parse
+  // Transform form data into an actual object we can use, then parse
   const result = addSchema.safeParse(Object.fromEntries(formData.entries()));
   if (result.success === false) {
     return result.error.formErrors.fieldErrors;
@@ -31,37 +31,43 @@ export async function addProduct(prevState: unknown, formData: FormData) {
 
   const data = result.data;
 
-  await fs.mkdir("products", { recursive: true });
-  const filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
-  await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
+  try {
+    // Ensure the products directory exists
+    await fs.mkdir("products", { recursive: true });
+    const filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
+    await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
 
-  await fs.mkdir("public/products", { recursive: true });
-  // don't need public in path because it will assume public once you're actually using the path
-  const imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
-  await fs.writeFile(
-    `public${imagePath}`,
-    Buffer.from(await data.image.arrayBuffer())
-  );
+    // Ensure the public/products directory exists
+    await fs.mkdir("public/products", { recursive: true });
+    // Don't need public in path because it will assume public once you're actually using the path
+    const imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
+    await fs.writeFile(
+      `public${imagePath}`,
+      Buffer.from(await data.image.arrayBuffer())
+    );
 
-  // .create() is a Prisma method for creating a new record in the db. In this case, in the products table. The method takes an object. The keys should match the column names in your table, and the values are the data you want to insert.
-  await db.product.create({
-    data: {
-      // make product unavailable upon creation by default
-      isAvailableForPurchase: false,
-      name: data.name,
-      description: data.description,
-      priceInCents: data.priceInCents,
-      filePath,
-      imagePath,
-    },
-  });
+    // Create a new product record in the database
+    await db.product.create({
+      data: {
+        isAvailableForPurchase: false,
+        name: data.name,
+        description: data.description,
+        priceInCents: data.priceInCents,
+        filePath,
+        imagePath,
+      },
+    });
 
-  // refresh cache (invalidate current data, and get all the data again)
-  revalidatePath("/")
-  revalidatePath("/products")
+    // Refresh cache
+    await revalidatePath("/");
+    await revalidatePath("/products");
 
-  // After clicking save to create the product, redirect to products page
-  redirect("/admin/products");
+    // Redirect to products page
+    return NextResponse.redirect("/admin/products");
+  } catch (error) {
+    console.error("Error adding product:", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
+  }
 }
 
 // same as addSchema, but extending it to change the file to be just default file schema, make it optional, and do the same with image
