@@ -26,7 +26,8 @@ const addSchema = z.object({
   image: imageSchema.refine((file) => file.size > 0, "Required"),
 });
 
-const s3 = new S3Client({ region: "us-east-2" }); // Replace with your AWS region
+const s3 = new S3Client({ region: "us-east-2" });
+const s3BaseUrl = "https://econ-site-data.s3.us-east-2.amazonaws.com/";
 
 export async function addProduct(
   prevState: unknown,
@@ -72,15 +73,15 @@ export async function addProduct(
     })
   );
 
-  // Save product details in the database
+  // Save product details in the database with full S3 URL
   await db.product.create({
     data: {
       isAvailableForPurchase: false,
       name: data.name,
       description: data.description,
       priceInCents: data.priceInCents,
-      filePath: fileKey,
-      imagePath: imageKey,
+      filePath: `${s3BaseUrl}${fileKey}`,
+      imagePath: `${s3BaseUrl}${imageKey}`,
     },
   });
 
@@ -128,7 +129,7 @@ export async function updateProduct(
     await s3.send(
       new DeleteObjectCommand({
         Bucket: "econ-site-data",
-        Key: product.filePath,
+        Key: product.filePath.replace(s3BaseUrl, ""),
       })
     );
     // Generate new file key and upload the new file
@@ -142,6 +143,7 @@ export async function updateProduct(
         ContentType: data.file.type,
       })
     );
+    filePath = `${s3BaseUrl}${filePath}`;
   }
 
   // basically defaulting to current image path, but if we pass up a new one, we delete the current one and create a brand new one
@@ -150,8 +152,8 @@ export async function updateProduct(
     // Delete the old image from S3
     await s3.send(
       new DeleteObjectCommand({
-        Bucket: "your-bucket-name",
-        Key: product.imagePath,
+        Bucket: "econ-site-data",
+        Key: product.imagePath.replace(s3BaseUrl, ""),
       })
     );
     // Generate new image key and upload the new image
@@ -165,6 +167,7 @@ export async function updateProduct(
         ContentType: data.image.type,
       })
     );
+    imagePath = `${s3BaseUrl}${imagePath}`;
   }
 
   // Only difference between addProduct and updateProduct is here we change to product.update, add a where: {id} clause, and remove the isAvailableForPurchase field
@@ -214,7 +217,7 @@ export async function deleteProduct(id: string) {
       await s3.send(
         new DeleteObjectCommand({
           Bucket: "econ-site-data",
-          Key: product.filePath,
+          Key: product.filePath.replace(s3BaseUrl, ""),
         })
       );
     } catch (err) {
@@ -227,7 +230,7 @@ export async function deleteProduct(id: string) {
       await s3.send(
         new DeleteObjectCommand({
           Bucket: "econ-site-data",
-          Key: product.imagePath,
+          Key: product.imagePath.replace(s3BaseUrl, ""),
         })
       );
     } catch (err) {
