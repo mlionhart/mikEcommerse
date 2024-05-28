@@ -7,23 +7,43 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { useState } from "react";
 import { addProduct, updateProduct } from "../../_actions/products";
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormStatus } from "react-dom";
 import { Product } from "@prisma/client";
 import Image from "next/image";
 
+// Define the error type based on your form validation schema
+interface FormErrors {
+  name?: string;
+  priceInCents?: string;
+  description?: string;
+  file?: string;
+  image?: string;
+}
+
 export function ProductForm({ product }: { product?: Product | null }) {
-  // if no product, use addProduct function, otherwise use updateProduct function.
-  const [error, action] = useFormState(
-    product == null ? addProduct : updateProduct.bind(null, product.id),
-    {}
-  );
-  // <number> makes it a completely blank input by default
+  const [errors, setErrors] = useState<FormErrors>({});
   const [priceInCents, setPriceInCents] = useState<number | undefined>(
     product?.priceInCents
   );
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    try {
+      if (product == null) {
+        await addProduct(undefined, formData);
+      } else {
+        await updateProduct(product.id, undefined, formData);
+      }
+      setErrors({});
+      // handle successful form submission, e.g., redirect or show a success message
+    } catch (err) {
+      setErrors(err as FormErrors);
+    }
+  };
+
   return (
-    <form action={action} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-8">
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
         <Input
@@ -33,10 +53,10 @@ export function ProductForm({ product }: { product?: Product | null }) {
           required
           defaultValue={product?.name || ""}
         />
-        {error.name && <div className="text-destructive">{error.name}</div>}
+        {errors.name && <div className="text-destructive">{errors.name}</div>}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="name">Price in Cents</Label>
+        <Label htmlFor="priceInCents">Price in Cents</Label>
         <Input
           type="number"
           id="priceInCents"
@@ -48,8 +68,8 @@ export function ProductForm({ product }: { product?: Product | null }) {
         <div className="text-muted-foreground">
           {formatCurrency((priceInCents || 0) / 100)}
         </div>
-        {error.priceInCents && (
-          <div className="text-destructive">{error.priceInCents}</div>
+        {errors.priceInCents && (
+          <div className="text-destructive">{errors.priceInCents}</div>
         )}
       </div>
       <div className="space-y-2">
@@ -60,8 +80,8 @@ export function ProductForm({ product }: { product?: Product | null }) {
           required
           defaultValue={product?.description || ""}
         />
-        {error.description && (
-          <div className="text-destructive">{error.description}</div>
+        {errors.description && (
+          <div className="text-destructive">{errors.description}</div>
         )}
       </div>
       <div className="space-y-2">
@@ -69,9 +89,9 @@ export function ProductForm({ product }: { product?: Product | null }) {
         <Input type="file" id="file" name="file" required={product == null} />
         {/* show file info */}
         {product != null && (
-          <div className="text-muted=foreground">{product.filePath}</div>
+          <div className="text-muted-foreground">{product.filePath}</div>
         )}
-        {error.file && <div className="text-destructive">{error.file}</div>}
+        {errors.file && <div className="text-destructive">{errors.file}</div>}
       </div>
       <div className="space-y-2">
         <Label htmlFor="image">Image</Label>
@@ -85,7 +105,7 @@ export function ProductForm({ product }: { product?: Product | null }) {
             alt="Product Image"
           />
         )}
-        {error.image && <div className="text-destructive">{error.image}</div>}
+        {errors.image && <div className="text-destructive">{errors.image}</div>}
       </div>
       <SubmitButton />
     </form>
