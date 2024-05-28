@@ -1,8 +1,13 @@
 "use server";
 
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import db from "@/db/db";
 import { z } from "zod";
-import fs from "fs/promises";
+import crypto from "crypto";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -21,33 +26,61 @@ const addSchema = z.object({
   image: imageSchema.refine((file) => file.size > 0, "Required"),
 });
 
-export async function addProduct(prevState: unknown, formData: FormData) {
+const s3 = new S3Client({ region: "us-east-2" }); // Replace with your AWS region
+
+export async function addProduct(
+  prevState: unknown,
+  formData: FormData
+): Promise<unknown> {
   const result = addSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (result.success === false) {
+  if (!result.success) {
     return result.error.formErrors.fieldErrors;
   }
 
-  const data = result.data;
+  const data = result.data as {
+    name: string;
+    description: string;
+    priceInCents: number;
+    file: File;
+    image: File;
+  };
+  const bucketName = "econ-site-data"; // Replace with your S3 bucket name
 
-  await fs.mkdir("products", { recursive: true });
-  const filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
-  await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
+  // Generate unique file names
+  const fileUUID = crypto.randomUUID();
+  const imageUUID = crypto.randomUUID();
+  const fileKey = `${fileUUID}-${data.file.name}`;
+  const imageKey = `${imageUUID}-${data.image.name}`;
 
-  await fs.mkdir("public/products", { recursive: true });
-  const imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
-  await fs.writeFile(
-    `public${imagePath}`,
-    Buffer.from(await data.image.arrayBuffer())
+  // Upload file to S3
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: fileKey,
+      Body: Buffer.from(await data.file.arrayBuffer()),
+      ContentType: data.file.type,
+    })
   );
 
+  // Upload image to S3
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: imageKey,
+      Body: Buffer.from(await data.image.arrayBuffer()),
+      ContentType: data.image.type,
+    })
+  );
+
+  // Save product details in the database
   await db.product.create({
     data: {
       isAvailableForPurchase: false,
       name: data.name,
       description: data.description,
       priceInCents: data.priceInCents,
-      filePath,
-      imagePath,
+      filePath: fileKey,
+      imagePath: imageKey,
     },
   });
 
@@ -75,7 +108,13 @@ export async function updateProduct(
   }
 
   // get data
-  const data = result.data;
+  const data = result.data as {
+    name: string;
+    description: string;
+    priceInCents: number;
+    file?: File;
+    image?: File;
+  };
   // get product based on id
   const product = await db.product.findUnique({ where: { id } });
 
@@ -85,22 +124,46 @@ export async function updateProduct(
   let filePath = product.filePath;
   // if we already have a file, delete the old file and upload a brand new one
   if (data.file != null && data.file.size > 0) {
-    // first, unlink (remove) original file
-    await fs.unlink(product.filePath);
-    // create new path
-    filePath = `products/${crypto.randomUUID()}-${data.file.name}`;
-    // save file
-    await fs.writeFile(filePath, Buffer.from(await data.file.arrayBuffer()));
+    // Delete the old file from S3
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: "econ-site-data",
+        Key: product.filePath,
+      })
+    );
+    // Generate new file key and upload the new file
+    const fileUUID = crypto.randomUUID();
+    filePath = `${fileUUID}-${data.file.name}`;
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: "econ-site-data",
+        Key: filePath,
+        Body: Buffer.from(await data.file.arrayBuffer()),
+        ContentType: data.file.type,
+      })
+    );
   }
 
   // basically defaulting to current image path, but if we pass up a new one, we delete the current one and create a brand new one
   let imagePath = product.imagePath;
   if (data.image != null && data.image.size > 0) {
-    await fs.unlink(`public${product.imagePath}`);
-    imagePath = `/products/${crypto.randomUUID()}-${data.image.name}`;
-    await fs.writeFile(
-      `public${imagePath}`,
-      Buffer.from(await data.image.arrayBuffer())
+    // Delete the old image from S3
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: "your-bucket-name",
+        Key: product.imagePath,
+      })
+    );
+    // Generate new image key and upload the new image
+    const imageUUID = crypto.randomUUID();
+    imagePath = `${imageUUID}-${data.image.name}`;
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: "econ-site-data",
+        Key: imagePath,
+        Body: Buffer.from(await data.image.arrayBuffer()),
+        ContentType: data.image.type,
+      })
     );
   }
 
@@ -108,8 +171,6 @@ export async function updateProduct(
   await db.product.update({
     where: { id },
     data: {
-      // make product unavailable upon creation by default
-      // isAvailableForPurchase: false,
       name: data.name,
       description: data.description,
       priceInCents: data.priceInCents,
@@ -147,26 +208,30 @@ export async function deleteProduct(id: string) {
 
   if (product == null) return notFound();
 
-  // if product deletion successful, we want to take the product and unlink those files. Make sure to put these dirs in .gitignore bc they are purely for testing purposes
+  // Delete files from S3 if they exist
   if (product.filePath) {
     try {
-      await fs.unlink(product.filePath);
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: "econ-site-data",
+          Key: product.filePath,
+        })
+      );
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw err;
-      }
-      // Ignore ENOENT errors, which indicate that the file doesn't exist
+      console.error("Failed to delete file from S3:", err);
     }
   }
 
   if (product.imagePath) {
     try {
-      await fs.unlink(`public${product.imagePath}`);
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: "econ-site-data",
+          Key: product.imagePath,
+        })
+      );
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw err;
-      }
-      // Ignore ENOENT errors, which indicate that the file doesn't exist
+      console.error("Failed to delete image from S3:", err);
     }
   }
 
