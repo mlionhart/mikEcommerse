@@ -28,13 +28,11 @@ export function ProductCard({
   console.log("Image URL:", imagePath); // Debug log
   return (
     <Card className="flex overflow-hidden flex-col">
-      <div className="relative w-full h-auto aspect-video">
         <img
           src={imagePath}
           alt={name}
-          style={{ width: "100%", height: "auto" }}
+          style={{ width: "100%", height: "auto", aspectRatio: "video" }}
         />
-      </div>
       <CardHeader>
         <CardTitle>{name}</CardTitle>
         <CardDescription>{formatCurrency(priceInCents / 100)}</CardDescription>
