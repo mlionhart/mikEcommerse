@@ -53,8 +53,5 @@
   },
   "resolutions": {
     "esbuild": "0.21.3"
-  },
-  "engines": {
-    "node": "20.5.1"
   }
 }
