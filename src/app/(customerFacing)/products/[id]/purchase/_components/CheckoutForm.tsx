@@ -105,24 +105,11 @@ function Form({ priceInCents, productId }: { priceInCents: number, productId: st
         },
       })
       .then(({ error }) => {
-        if (error) {
-          console.error("Stripe confirmation error:", error);
-          console.log(
-            "Return URL:",
-            `${process.env.NEXT_PUBLIC_SERVER_URL}/stripe/purchase-success`
-          );
-
-          // if error the customer would understand
-          if (
-            error.type === "card_error" ||
-            error.type === "validation_error"
-          ) {
-            setErrorMessage(error.message);
-          } else {
-            setErrorMessage("An unknown error occurred");
-          }
+        // if error the customer would understand
+        if (error.type === "card_error" || error.type === "validation_error") {
+          setErrorMessage(error.message);
         } else {
-          // Handle successful payment intent confirmation if needed
+          setErrorMessage("An unknown error occured");
         }
       })
       .finally(() => setIsLoading(false)); // lets us resubmit the form
