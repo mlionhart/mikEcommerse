@@ -3,7 +3,7 @@
 import db from "@/db/db";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import {Resend} from "resend";
+import { Resend } from "resend";
 import PurchaseReceiptEmail from "@/email/PurchaseReceipt";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -11,25 +11,45 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // first we need to create a POST event (will be called by Stripe)
 export async function POST(req: NextRequest) {
-  // this will verify that everything passed to this is actually coming from Stripe. That's why we have the secret key
-  const event = await stripe.webhooks.constructEvent(
-    await req.text(),
-    req.headers.get("stripe-signature") as string,
-    process.env.STRIPE_WEBHOOK_SECRET as string
-  );
+  let event: Stripe.Event;
+
+  try {
+    // this will verify that everything passed to this is actually coming from Stripe. That's why we have the secret key
+    const sig = req.headers.get("stripe-signature") as string;
+    const body = await req.text();
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET as string
+    );
+  } catch (err) {
+    const error = err as Error;
+    console.error("⚠️  Webhook signature verification failed.", error.message);
+    return new NextResponse("Webhook signature verification failed.", {
+      status: 400,
+    });
+  }
 
   // all the info we need to create an order for a customer, and we already know that this is verified by Stripe, because of lines 12-15
   if (event.type === "charge.succeeded") {
-    const charge = event.data.object;
+    const charge = event.data.object as Stripe.Charge;
     const productId = charge.metadata.productId;
     const email = charge.billing_details.email;
     const pricePaidInCents = charge.amount;
+
+    // Log received data
+    console.log("Received charge.succeeded event with data:", {
+      productId,
+      email,
+      pricePaidInCents,
+    });
 
     // now we can create order, but first make sure product exists
     const product = await db.product.findUnique({
       where: { id: productId },
     });
     if (product == null || email == null) {
+      console.error("Product not found or email is null.");
       return new NextResponse("Bad request", { status: 400 });
     }
 
@@ -58,13 +78,27 @@ export async function POST(req: NextRequest) {
     });
 
     // send email(s)
-    await resend.emails.send({
-      from: `Support <${process.env.SENDER_EMAIL}>`,
-      to: email,
-      subject: "Order Confirmation",
-      react: <PurchaseReceiptEmail order={ order } product={ product } downloadVerificationId={downloadVerification.id} />,
-    })
+    try {
+      await resend.emails.send({
+        from: `Support <${process.env.SENDER_EMAIL}>`,
+        to: email,
+        subject: "Order Confirmation",
+        react: (
+          <PurchaseReceiptEmail
+            order={order}
+            product={product}
+            downloadVerificationId={downloadVerification.id}
+          />
+        ),
+      });
+    } catch (emailError) {
+      const error = emailError as Error;
+      console.error("Error sending email:", error.message);
+    }
+
+    return new NextResponse("Webhook received and processed", { status: 200 });
   }
-  // if all code works well, at least send a successful response
-  return new NextResponse()
+
+  console.log(`Unhandled event type ${event.type}`);
+  return new NextResponse("Event type not handled", { status: 400 });
 }
