@@ -22,9 +22,22 @@ export async function GET(
   });
 
   if (data == null) {
-    return NextResponse.redirect(
-      new URL("/products/download/expired", req.url)
+    return new NextResponse(
+      `<html><body>
+         <h1>Error</h1>
+         <p>Download verification not found or expired.</p>
+         <p>Verification ID: ${downloadVerificationId}</p>
+         <p>Current Time: ${new Date().toISOString()}</p>
+       </body></html>`,
+      {
+        headers: {
+          "Content-Type": "text/html",
+        },
+      }
     );
+    // return NextResponse.redirect(
+    //   new URL("/products/download/expired", req.url)
+    // );
   }
 
   const key = data.product.filePath.replace(s3BaseUrl, "");
