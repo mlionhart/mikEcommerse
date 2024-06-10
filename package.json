@@ -12,7 +12,8 @@
     "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.583.0",
+    "@aws-sdk/client-s3": "^3.592.0",
+    "@aws-sdk/s3-request-presigner": "^3.592.0",
     "@prisma/client": "^5.14.0",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@radix-ui/react-label": "^2.0.2",

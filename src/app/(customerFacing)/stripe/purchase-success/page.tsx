@@ -1,12 +1,16 @@
 import { Button } from "@/components/ui/button";
 import db from "@/db/db";
 import { formatCurrency } from "@/lib/formatters";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Stripe from "stripe";
+import {getSignedUrl} from "@aws-sdk/s3-request-presigner";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const s3 = new S3Client({ region: "us-east-2" });
+const bucketName = "econ-site-data";
 
 export default async function SuccessPage({
   searchParams,
@@ -27,8 +31,15 @@ export default async function SuccessPage({
 
   const isSuccess = paymentIntent.status === "succeeded";
 
-  // Create the download verification ID before rendering the JSX
-  const downloadVerificationId = await createDownloadVerification(product.id);
+  // Generate a signed URL for the S3 file
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: product.filePath.replace(
+      `https://${bucketName}.s3.us-east-2.amazonaws.com/`,
+      ""
+    ),
+  });
+  const signedUrl = await getSignedUrl(s3, command, { expiresIn: 86400 }); // URL valid for 1 hour
 
   return (
     <div className="max-w-5xl w-full mx-auto space-y-8">
@@ -54,7 +65,7 @@ export default async function SuccessPage({
           </div>
           <Button className="mt-4" size="lg" asChild>
             {isSuccess ? (
-              <a href={product.filePath}>Download</a>
+              <a href={signedUrl}>Download</a>
             ) : (
               <Link href={`/products/${product.id}/purchase`}>Try Again</Link>
             )}
@@ -65,14 +76,14 @@ export default async function SuccessPage({
   );
 }
 
-async function createDownloadVerification(productId: string) {
-  // create and return download verification for product id: productId that expires 24 hours from now (1000 * 60 * 60 * 24 === milliseconds * seconds * minutes * hours)
-  return (
-    await db.downloadVerification.create({
-      data: {
-        productId,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      },
-    })
-  ).id;
-}
+// async function createDownloadVerification(productId: string) {
+//   // create and return download verification for product id: productId that expires 24 hours from now (1000 * 60 * 60 * 24 === milliseconds * seconds * minutes * hours)
+//   return (
+//     await db.downloadVerification.create({
+//       data: {
+//         productId,
+//         expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+//       },
+//     })
+//   ).id;
+// }
