@@ -58,28 +58,13 @@ export async function GET(
     const extension = key.split(".").pop();
 
     // construct and return download link based on info
-    // return new NextResponse(fileBuffer, {
-    //   headers: {
-    //     "Content-Disposition": `attachment; filename="${data.product.name}.${extension}"`,
-    //     "Content-Length": fileSize.toString(),
-    //     "Content-Type": fileData.ContentType || "application/octet-stream",
-    //   },
-    // });
-    return new NextResponse(
-      `<html><body>
-         <h1>Download Information</h1>
-         <p>File Name: ${data.product.name}.${extension}</p>
-         <p>File Size: ${fileSize}</p>
-         <p>Expires At: ${data.expiresAt}</p>
-         <p>Current Time: ${new Date().toISOString()}</p>
-         <a href="data:application/octet-stream;base64,${fileBuffer.toString("base64")}" download="${data.product.name}.${extension}">Download File</a>
-       </body></html>`,
-      {
-        headers: {
-          "Content-Type": "text/html",
-        },
-      }
-    );
+    return new NextResponse(fileBuffer, {
+      headers: {
+        "Content-Disposition": `attachment; filename="${data.product.name}.${extension}"`,
+        "Content-Length": fileSize.toString(),
+        "Content-Type": fileData.ContentType || "application/octet-stream",
+      },
+    });
   } catch (error) {
     console.error("Error fetching file from S3: ", error);
     return NextResponse.redirect(new URL("/products/download/expired", req.url));

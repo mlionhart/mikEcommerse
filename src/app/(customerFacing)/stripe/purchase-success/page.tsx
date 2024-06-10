@@ -27,6 +27,9 @@ export default async function SuccessPage({
 
   const isSuccess = paymentIntent.status === "succeeded";
 
+  // Create the download verification ID before rendering the JSX
+  const downloadVerificationId = await createDownloadVerification(product.id);
+
   return (
     <div className="max-w-5xl w-full mx-auto space-y-8">
       <h1 className="text-4xl font-bold">
@@ -52,10 +55,10 @@ export default async function SuccessPage({
           <Button className="mt-4" size="lg" asChild>
             {isSuccess ? (
               <a
-                href={`/products/download/${await createDownloadVerification(
-                  product.id
-                )}`}
-              >Download</a>
+                href={`/products/download/${downloadVerificationId}`}
+              >
+                Download
+              </a>
             ) : (
               <Link href={`/products/${product.id}/purchase`}>Try Again</Link>
             )}
