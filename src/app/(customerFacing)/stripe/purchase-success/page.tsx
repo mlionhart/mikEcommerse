@@ -54,11 +54,7 @@ export default async function SuccessPage({
           </div>
           <Button className="mt-4" size="lg" asChild>
             {isSuccess ? (
-              <a
-                href={`https://econ-site-data.s3.us-east-2.amazonaws.com/${downloadVerificationId}`}
-              >
-                Download
-              </a>
+              <a href={product.filePath}>Download</a>
             ) : (
               <Link href={`/products/${product.id}/purchase`}>Try Again</Link>
             )}
