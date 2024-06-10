@@ -9,10 +9,25 @@ const bucketName = "econ-site-data"; // Replace with your S3 bucket name
 
 export async function GET(
   req: NextRequest,
-  {
-    params: { downloadVerificationId },
-  }: { params: { downloadVerificationId: string } }
+  context: { params: { downloadVerificationId: string } }
 ) {
+
+  const { downloadVerificationId } = context.params;
+
+  if (!downloadVerificationId) {
+    return new NextResponse(
+      `<html><body>
+         <h1>Error</h1>
+         <p>No download verification ID provided.</p>
+       </body></html>`,
+      {
+        headers: {
+          "Content-Type": "text/html",
+        },
+      }
+    );
+  }
+  
   const data = await db.downloadVerification.findUnique({
     where: { id: downloadVerificationId, expiresAt: { gt: new Date() } },
     select: {
@@ -67,7 +82,9 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error fetching file from S3: ", error);
-    return NextResponse.redirect(new URL("/products/download/expired", req.url));
+    return NextResponse.redirect(
+      new URL("/products/download/expired", req.url)
+    );
   }
 }
 
