@@ -28,6 +28,8 @@ const addSchema = z.object({
 
 const s3 = new S3Client({ region: "us-east-2" });
 const s3BaseUrl = "https://econ-site-data.s3.us-east-2.amazonaws.com/";
+const bucketName = "econ-site-data"; // Replace with your S3 bucket name
+
 
 export async function addProduct(
   prevState: unknown,
@@ -45,7 +47,6 @@ export async function addProduct(
     file: File;
     image: File;
   };
-  const bucketName = "econ-site-data"; // Replace with your S3 bucket name
 
   // Generate unique file names
   const fileUUID = crypto.randomUUID();
